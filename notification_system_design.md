@@ -126,3 +126,39 @@ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_delivery_status ON webhook_deliveries(status);
 CREATE INDEX idx_delivery_retry ON webhook_deliveries(next_retry_at) WHERE status = 'pending';
+
+### stage 3
+
+The database does a full table scan of 500K rows, filters in memory, then sorts — all in RAM/disk. No index means O(n) every time.
+
+### changes
+
+CREATE INDEX idx_notif_student_unread_created
+ON notification(studentId, isRead, createdAt DESC);
+
+## what is does
+
+1. Seek directly to studentId = 1042
+2. Filter isRead = false within that range
+3. Return already sorted by createdAt DESC
+
+### Is "add index on every column" accurate?
+
+No, that's bad advice. Indexes on every column:
+
+- Slows every INSERT/UPDATE/DELETE (each index must be updated on write)
+- Wastes disk space
+- The optimizer may still pick the wrong one
+- we need the targeted composite indexes that match actual query patterns
+  Rule of thumb for remembbering: one composite index per query pattern, not one per column
+
+### Query: students with placement notifications in last 7 days
+
+SELECT DISTINCT studentId
+FROM notification
+WHERE notification_type = 'placement'
+AND createdAt >= NOW() - INTERVAL '7 days';
+
+and if indexed then:
+CREATE INDEX idx_notif_type_created
+ON notification(notification_type, createdAt DESC);
