@@ -1,4 +1,5 @@
 const express = require("express");
+const log = require('../logging_middleware/log.js');
 const router = express.Router();
 const api = require("../config/axios");
 
@@ -18,6 +19,7 @@ router.post("/", async (req, res) => {
 		});
 
 		const sorted = [...vehicles].sort((a, b) => b.Impact - a.Impact);
+		log.logger('backend', 'handle', 'info', 'fetching notifications');
 
 		const sortedAssignedVehicles = {};
 		sorted.forEach((v) => {
@@ -41,7 +43,7 @@ router.post("/", async (req, res) => {
 				});
 			}
 		});
-
+		log.logger('backend', 'controller', 'info', 'fetching notifications');
 		res.json({ sortedAssignedVehicles });
 	} catch (error) {
 		console.error("api call failed!: ", error.message);
