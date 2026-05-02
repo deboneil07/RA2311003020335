@@ -7,7 +7,7 @@ const vehicleRouter = require("./vehicle_maintainence_scheduler/vehicle");
 
 // app.post("http://20.207.122.201/evaluation-service/auth", info);
 
-// logger.logger("backend", "debug", "cache", "recieved!");
+logger.logger("backend", "debug", "cache", "recieved!");
 app.use("/vehicle_maintain", vehicleRouter);
 
 app.listen(3000, () => {
