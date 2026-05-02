@@ -162,3 +162,16 @@ AND createdAt >= NOW() - INTERVAL '7 days';
 and if indexed then:
 CREATE INDEX idx_notif_type_created
 ON notification(notification_type, createdAt DESC);
+
+### stage 4
+
+the notification being fetched on each page loads needs to be done with two things primarily:
+
+- cache the notif if successfully trigged/fired to the client once.
+- make sure `isRead` is idempotent or update the schema to have a idempotent field that tracks the occurances of that notification to ensure its not fired upon load again.
+- simultaneously, delete older notifications after idemptotent field is filled/updated to not risk the "500000 notifs" loaded issues
+- intermittent cleaning via bash script for each distrubuted or vertically scaled pgsql instance is a good practice!
+
+as for tradeoffs, this method just gets the jobs done, but critically speaking:
+
+- delays/late updates for the idempotent field, also to solve this create a redis cluster with instances that keep track for updating idempotent field and update them later
