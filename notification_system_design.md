@@ -127,7 +127,7 @@ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 CREATE INDEX idx_delivery_status ON webhook_deliveries(status);
 CREATE INDEX idx_delivery_retry ON webhook_deliveries(next_retry_at) WHERE status = 'pending';
 
-### stage 3
+## stage 3
 
 The database does a full table scan of 500K rows, filters in memory, then sorts — all in RAM/disk. No index means O(n) every time.
 
@@ -163,7 +163,7 @@ and if indexed then:
 CREATE INDEX idx_notif_type_created
 ON notification(notification_type, createdAt DESC);
 
-### stage 4
+## stage 4
 
 the notification being fetched on each page loads needs to be done with two things primarily:
 
@@ -175,3 +175,23 @@ the notification being fetched on each page loads needs to be done with two thin
 as for tradeoffs, this method just gets the jobs done, but critically speaking:
 
 - delays/late updates for the idempotent field, also to solve this create a redis cluster with instances that keep track for updating idempotent field and update them later
+
+## stage 5
+
+when hr clicked notif_all, the first was that assuming its a express server which is single-threaded event-loop, it is bound to fail, matter of fact not only 200, but around 1000s should fail.
+some ways i can think of saving this:
+
+- asynchronous post requests
+- use of better frameworks than express, (go/gin, rust, java) that can handle multi threaded channels that can dsitribute the tasks efficiently
+- no need to do sequential for loops, fetch the total students, divide into mini batches then send then with a distributed event processing engine like apache kafka, bullmq that can asynchronously process and batch out events faster than express ever can!
+- as for the failed 200 students, due to the idempotent field, retries + batch processing needs to be handled carefully.
+- the processing of saving to db at the same time should'nt happen if the db is not distributed across cluster, channels will be filled and cause breakout and circuit breaking techniques needs to be applied
+- i suggest, using the redis cluster i mentioned to fan-in and fan-out the db writes needed.
+
+### code
+
+def async notify_all(batch_id, message, batch_len):
+for i in range(batch_len):
+res = await sendEmail(batch_id, message, kafka_id) -- kafka will handle the db updation via redis cluster
+if (res):
+push_to\_\_app(message, batch_id)
