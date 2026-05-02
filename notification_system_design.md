@@ -195,3 +195,7 @@ for i in range(batch_len):
 res = await sendEmail(batch_id, message, kafka_id) -- kafka will handle the db updation via redis cluster
 if (res):
 push_to\_\_app(message, batch_id)
+
+## stage 6
+
+we can maintain an index or a instance that keeps updating the list of top 10 efficiently with polling calls in repeated intervals
