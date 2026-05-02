@@ -67,3 +67,62 @@ a simple header for the webhook that will be responsible for re-verifying and di
    b. Finds matching webhook subscriptions for "user.logged.in"
    c. Async delivers POST to each registered webhook URL with HMAC signature
 4. User logs in → GET /api/v1/users/:id/notifications → notification fired to the device
+
+## Stage 2
+
+### DB of choice
+
+based on requirement, the database of choice for initial scales would be postgreSQL with pgbouncer for pooled connections capable enough for scaling well above most enterprises can hit for a long time.
+even so, upon scaling we can start horizontal scaling by distributing the databases based on nodes and hashes, partitioning, shards, shared_buffers, read replicas and offloading strategies. Its a large topic on its own, even though i want to write a long para on this!
+
+for stage 1, the default choice for notifs would also be nosql dbs like cassandra, mongodb that can scale well above with trade offs being non relational (rows and cols) but i preferred postgresQL because its battle-tested and works well everytime. (Latest Jargon and Hype <<< battle tested enterprise software with decades of exp)
+
+### db schema - SQL
+
+`notifs table`
+CREATE TABLE notifications (
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+user_id UUID NOT NULL,
+event_type VARCHAR(100) NOT NULL,
+title VARCHAR(255) NOT NULL,
+message TEXT NOT NULL,
+payload JSONB NOT NULL DEFAULT '{}',
+is_read BOOLEAN NOT NULL DEFAULT FALSE,
+created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_notif_user_id ON notifications(user_id);
+CREATE INDEX idx_notif_user_unread ON notifications(user_id, is_read) WHERE is_read = FALSE;
+CREATE INDEX idx_notif_created_desc ON notifications(created_at DESC);
+
+`webhook subscription for each connected clients`
+CREATE TABLE webhook_subscriptions (
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+user_id UUID NOT NULL,
+url VARCHAR(2048) NOT NULL,
+subscribed_events TEXT[] NOT NULL DEFAULT '{}',
+hmac_secret VARCHAR(255) NOT NULL,
+is_active BOOLEAN NOT NULL DEFAULT TRUE,
+created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_webhook_user ON webhook_subscriptions(user_id);
+CREATE INDEX idx_webhook_active ON webhook_subscriptions(is_active);
+
+`webhook tracking`
+CREATE TABLE webhook_deliveries (
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+subscription_id UUID NOT NULL REFERENCES webhook_subscriptions(id) ON DELETE CASCADE,
+notification_id UUID NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+event_type VARCHAR(100) NOT NULL,
+delivery_payload JSONB NOT NULL,
+status VARCHAR(20) NOT NULL DEFAULT 'pending', -- pending | delivered | failed | retrying
+response_status_code INTEGER,
+response_body TEXT,
+attempts INTEGER NOT NULL DEFAULT 0,
+max_attempts INTEGER NOT NULL DEFAULT 5,
+next_retry_at TIMESTAMPTZ,
+delivered_at TIMESTAMPTZ,
+created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_delivery_status ON webhook_deliveries(status);
+CREATE INDEX idx_delivery_retry ON webhook_deliveries(next_retry_at) WHERE status = 'pending';
